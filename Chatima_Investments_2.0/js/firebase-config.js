@@ -1,10 +1,9 @@
-// Paste YOUR Firebase web app settings here (Firebase console > Project settings > Your apps > Web app).
-// These values identify your project. They are not passwords; your Firestore rules protect the data.
+
 window.CHATIMA_FIREBASE_CONFIG = {
-    apiKey: "PASTE_API_KEY",
-    authDomain: "PASTE_PROJECT_ID.firebaseapp.com",
-    projectId: "PASTE_PROJECT_ID",
-    storageBucket: "PASTE_PROJECT_ID.appspot.com",
-    messagingSenderId: "PASTE_SENDER_ID",
-    appId: "PASTE_APP_ID"
+    apiKey: "AIzaSyDV_UVd_8x-VYxN9mgLSY78tnVpjNoFN44",
+    authDomain: "chatima-investments-2.firebaseapp.com",
+    projectId: "chatima-investments-2",
+    storageBucket: "chatima-investments-2.firebasestorage.app",
+    messagingSenderId: "584021782681",
+    appId: "1:584021782681:web:b5ab0bdf6e3a5e796b4808"
 };
