@@ -39,15 +39,16 @@
             return this.getProfile().then(function (profile) {
                 var user = window.auth.currentUser;
                 if (!user) throw new Error('Firebase session has expired.');
-                // Local IDs are generated separately in each browser/device.
-                // Link by the authenticated Firebase profile name and role instead.
-                function normaliseName(value) {
-                    return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+                // Firebase UID is the cloud identity. Firestore security rules
+                // restrict access to the authorised Main Admin UIDs.
+                // Local PIN IDs and display names are device-specific and are
+                // not reliable Firebase identity checks.
+                if (profile.role !== 'owner' || profile.active !== true) {
+                    throw new Error('This Firebase account is not an active Main Admin.');
                 }
-                if (!profile.name || normaliseName(profile.name) !== normaliseName(localUser.name)) {
-                    throw new Error('The signed-in Firebase account name does not match the selected local Main Admin. Check that you selected the correct Main Admin and entered the matching Firebase email.');
+                if (localUser.role !== 'owner') {
+                    throw new Error('A local Main Admin account is required.');
                 }
-                if (profile.role !== localUser.role) throw new Error('Local and Firebase roles do not match.');
                 return { verified: true, name: profile.name, role: profile.role, firebaseUID: user.uid };
             });
         },
