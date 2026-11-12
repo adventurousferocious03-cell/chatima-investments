@@ -18,6 +18,10 @@
 
     window.ChatimaCloud = {
 
+        // -----------------------------------------
+        // FIREBASE STATUS
+        // -----------------------------------------
+
         ready: function () {
             return !!(
                 window.auth &&
@@ -26,13 +30,19 @@
             );
         },
 
+        // -----------------------------------------
+        // MAIN ADMIN AUTHENTICATION
+        // -----------------------------------------
+
         signIn: function (email, password) {
             if (!this.ready()) {
                 return cloudError('Firebase is not initialised.');
             }
 
             if (!email || !password) {
-                return cloudError('Enter your Firebase email and password.');
+                return cloudError(
+                    'Enter your Firebase email and password.'
+                );
             }
 
             return window.auth.signInWithEmailAndPassword(
@@ -50,8 +60,14 @@
         },
 
         currentUser: function () {
-            return window.auth ? window.auth.currentUser : null;
+            return window.auth
+                ? window.auth.currentUser
+                : null;
         },
+
+        // -----------------------------------------
+        // AUTHORISED USER PROFILE
+        // -----------------------------------------
 
         getProfile: function () {
             var user = this.currentUser();
@@ -61,7 +77,9 @@
             }
 
             if (!user) {
-                return cloudError('No Firebase user is signed in.');
+                return cloudError(
+                    'No Firebase user is signed in.'
+                );
             }
 
             return window.db.collection('users')
@@ -77,7 +95,9 @@
                     var profile = doc.data();
 
                     if (profile.active !== true) {
-                        throw new Error('This account is inactive.');
+                        throw new Error(
+                            'This account is inactive.'
+                        );
                     }
 
                     if (profile.role !== 'owner') {
@@ -90,8 +110,15 @@
                 });
         },
 
+        // -----------------------------------------
+        // VERIFY LOCAL AND FIREBASE ACCOUNTS
+        // -----------------------------------------
+
         verifyLocalLink: function (localUser) {
-            if (!localUser || localUser.role !== 'owner') {
+            if (
+                !localUser ||
+                localUser.role !== 'owner'
+            ) {
                 return cloudError(
                     'A valid local Main Admin account is required.'
                 );
@@ -101,7 +128,9 @@
                 var firebaseUser = window.auth.currentUser;
 
                 if (!firebaseUser) {
-                    throw new Error('Firebase session has expired.');
+                    throw new Error(
+                        'Firebase session has expired.'
+                    );
                 }
 
                 if (profile.localUserId !== localUser.id) {
@@ -125,52 +154,200 @@
             });
         },
 
+        // -----------------------------------------
+        // BUSINESS DATABASE REFERENCE
+        // -----------------------------------------
+
         businessRef: function () {
             if (!this.ready()) {
-                throw new Error('Firebase is not initialised.');
+                throw new Error(
+                    'Firebase is not initialised.'
+                );
             }
 
             return window.db.collection('businesses')
                 .doc('chatima-main');
         },
 
+        // -----------------------------------------
+        // LOAD CLOUD RECORDS
+        // -----------------------------------------
+
         loadBusinessData: function (localUser) {
             var self = this;
 
-            return self.verifyLocalLink(localUser).then(function () {
-                if (
-                    typeof navigator !== 'undefined' &&
-                    navigator.onLine === false
-                ) {
-                    throw new Error(
-                        'You are offline. Cloud records cannot be loaded yet.'
-                    );
-                }
+            return self.verifyLocalLink(localUser)
+                .then(function () {
+                    if (
+                        typeof navigator !== 'undefined' &&
+                        navigator.onLine === false
+                    ) {
+                        throw new Error(
+                            'You are offline. Cloud records cannot be loaded yet.'
+                        );
+                    }
 
-                var business = self.businessRef();
+                    var business = self.businessRef();
 
-                return Promise.all([
-                    business.collection('vehicles').get(),
-                    business.collection('transactions').get()
-                ]);
-            }).then(function (results) {
-                return {
-                    vehicles: results[0].docs.map(function (doc) {
-                        return doc.data();
-                    }),
+                    return Promise.all([
+                        business.collection('vehicles').get(),
+                        business.collection('transactions').get()
+                    ]);
+                })
+                .then(function (results) {
+                    return {
+                        vehicles: results[0].docs.map(
+                            function (doc) {
+                                return doc.data();
+                            }
+                        ),
 
-                    entries: results[1].docs.map(function (doc) {
-                        return doc.data();
-                    })
-                };
-            });
+                        entries: results[1].docs.map(
+                            function (doc) {
+                                return doc.data();
+                            }
+                        )
+                    };
+                });
         },
 
-        saveTransaction: function (localUser, transaction) {
+        // -----------------------------------------
+        // REAL-TIME CLOUD SYNCHRONISATION
+        // -----------------------------------------
+
+        startLiveSync: function (
+            localUser,
+            onUpdate,
+            onError
+        ) {
+            var self = this;
+
+            return self.verifyLocalLink(localUser)
+                .then(function () {
+                    var business = self.businessRef();
+
+                    var stopped = false;
+                    var vehiclesReady = false;
+                    var transactionsReady = false;
+
+                    var latestVehicles = [];
+                    var latestEntries = [];
+
+                    var unsubscribers = [];
+
+                    function reportError(error) {
+                        if (
+                            !stopped &&
+                            typeof onError === 'function'
+                        ) {
+                            onError(error);
+                        }
+                    }
+
+                    function publishUpdate() {
+                        if (
+                            stopped ||
+                            !vehiclesReady ||
+                            !transactionsReady
+                        ) {
+                            return;
+                        }
+
+                        if (typeof onUpdate === 'function') {
+                            onUpdate({
+                                vehicles: latestVehicles.slice(),
+                                entries: latestEntries.slice()
+                            });
+                        }
+                    }
+
+                    function stop() {
+                        if (stopped) {
+                            return;
+                        }
+
+                        stopped = true;
+
+                        unsubscribers.forEach(
+                            function (unsubscribe) {
+                                unsubscribe();
+                            }
+                        );
+
+                        unsubscribers = [];
+                    }
+
+                    try {
+                        // Listen for vehicle changes.
+                        unsubscribers.push(
+                            business.collection('vehicles')
+                                .onSnapshot(
+                                    function (snapshot) {
+                                        if (stopped) return;
+
+                                        latestVehicles =
+                                            snapshot.docs.map(
+                                                function (doc) {
+                                                    return doc.data();
+                                                }
+                                            );
+
+                                        vehiclesReady = true;
+                                        publishUpdate();
+                                    },
+                                    reportError
+                                )
+                        );
+
+                        // Listen for transaction changes.
+                        unsubscribers.push(
+                            business.collection('transactions')
+                                .onSnapshot(
+                                    function (snapshot) {
+                                        if (stopped) return;
+
+                                        latestEntries =
+                                            snapshot.docs.map(
+                                                function (doc) {
+                                                    return doc.data();
+                                                }
+                                            );
+
+                                        transactionsReady = true;
+                                        publishUpdate();
+                                    },
+                                    reportError
+                                )
+                        );
+
+                    } catch (error) {
+                        stop();
+                        throw error;
+                    }
+
+                    console.log(
+                        'Chatima live cloud listeners started.'
+                    );
+
+                    // Return this function to stop live syncing.
+                    return stop;
+                });
+        },
+
+        // -----------------------------------------
+        // SAVE TRANSACTION SAFELY
+        // -----------------------------------------
+
+        saveTransaction: function (
+            localUser,
+            transaction
+        ) {
             var self = this;
 
             if (!transaction) {
-                return cloudError('No transaction supplied.');
+                return cloudError(
+                    'No transaction supplied.'
+                );
             }
 
             if (
@@ -195,7 +372,9 @@
                 amount > 1000000000 ||
                 !Number.isFinite(timestamp)
             ) {
-                return cloudError('Invalid transaction details.');
+                return cloudError(
+                    'Invalid transaction details.'
+                );
             }
 
             var record = {
@@ -208,41 +387,59 @@
                 ts: timestamp
             };
 
-            return self.verifyLocalLink(localUser).then(function () {
-                var docRef = self.businessRef()
-                    .collection('transactions')
-                    .doc(record.id);
+            return self.verifyLocalLink(localUser)
+                .then(function () {
+                    var docRef = self.businessRef()
+                        .collection('transactions')
+                        .doc(record.id);
 
-                // Check before writing. Never overwrite an existing record.
-                return docRef.get().then(function (doc) {
-                    if (doc.exists) {
-                        var existing = doc.data();
+                    // Use a Firestore transaction to prevent
+                    // overwriting an existing transaction.
+                    return window.db.runTransaction(
+                        function (firestoreTransaction) {
+                            return firestoreTransaction
+                                .get(docRef)
+                                .then(function (doc) {
+                                    if (doc.exists) {
+                                        var existing = doc.data();
 
-                        if (sameTransaction(existing, record)) {
-                            return {
-                                saved: true,
-                                alreadyExists: true,
-                                record: record
-                            };
+                                        if (
+                                            sameTransaction(
+                                                existing,
+                                                record
+                                            )
+                                        ) {
+                                            return {
+                                                saved: true,
+                                                alreadyExists: true,
+                                                record: record
+                                            };
+                                        }
+
+                                        throw new Error(
+                                            'A different transaction already uses this ID. No data was overwritten.'
+                                        );
+                                    }
+
+                                    firestoreTransaction.set(
+                                        docRef,
+                                        record
+                                    );
+
+                                    return {
+                                        saved: true,
+                                        alreadyExists: false,
+                                        record: record
+                                    };
+                                });
                         }
-
-                        throw new Error(
-                            'A different transaction already uses this ID. No data was overwritten.'
-                        );
-                    }
-
-                    return docRef.set(record).then(function () {
-                        return {
-                            saved: true,
-                            alreadyExists: false,
-                            record: record
-                        };
-                    });
+                    );
                 });
-            });
         }
     };
 
-    console.log('Chatima Firestore helper loaded.');
+    console.log(
+        'Chatima Firestore helper loaded successfully.'
+    );
 
 })();
