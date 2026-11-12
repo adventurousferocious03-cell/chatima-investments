@@ -841,10 +841,11 @@ window.ChatimaCloud.signIn(email,password)
 
 .then(function(profile){
 
-if(profile.role!=='owner'||profile.active!==true||profile.localUserId!==u.id){
-
-throw new Error('This Firebase account is not linked to this Main Admin.');
-
+// Firebase UID and Firestore security rules identify the authorised
+// cloud administrator. Local PIN accounts have device-specific IDs and
+// names may differ between devices, so do not compare those values here.
+if(profile.role!=='owner'||profile.active!==true){
+throw new Error('This Firebase account is not an active Main Admin.');
 }
 
 S.fails=0;S.until=0;save();
