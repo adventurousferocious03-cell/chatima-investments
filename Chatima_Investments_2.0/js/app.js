@@ -841,10 +841,11 @@ window.ChatimaCloud.signIn(email,password)
 
 .then(function(profile){
 
-if(profile.role!=='owner'||profile.active!==true||profile.localUserId!==u.id){
-
-throw new Error('This Firebase account is not linked to this Main Admin.');
-
+function normaliseAdminName(value){
+return String(value||'').trim().replace(/\s+/g,' ').toLowerCase();
+}
+if(profile.role!=='owner'||profile.active!==true||!profile.name||normaliseAdminName(profile.name)!==normaliseAdminName(u.name)){
+throw new Error('The Firebase account name does not match the selected local Main Admin. Select the matching Main Admin and use that person’s Firebase email and password.');
 }
 
 S.fails=0;S.until=0;save();
