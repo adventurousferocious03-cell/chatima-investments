@@ -1,0 +1,28 @@
+
+<!-- Firebase (pinned version). If the phone is offline these fail quietly and the app still runs for staff. -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-init.js"></script>
+<script src="firestore-sync.js"></script>
+<script src="firestore-sync-extra.js"></script>
+<script src="app.js"></script>
+
+<!-- Register Chatima service worker for PWA installation and offline support -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(registration => {
+        console.log('Chatima service worker registered:', registration.scope);
+      })
+      .catch(error => {
+        console.error('Chatima service worker registration failed:', error);
+      });
+  });
+}
+</script>
+
+</body>
+</html>
